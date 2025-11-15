@@ -1,0 +1,57 @@
+# Nginx SSL Termination Configuration
+# Equivalent to HAproxy SSL termination setup
+# Listens on port 443, terminates SSL, forwards to backend over HTTP
+
+# Backend web servers (roundrobin load balancing)
+upstream web-backend {
+    server 18.205.151.247:80;
+    server 44.206.238.180:80;
+}
+
+# HTTP frontend - Redirect to HTTPS with 301
+server {
+    listen 80;
+    listen [::]:80;
+    server_name kezamegane.tech www.kezamegane.tech;
+    
+    # Redirect all HTTP traffic to HTTPS
+    return 301 https://$host$request_uri;
+}
+
+# HTTPS frontend - SSL Termination
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name kezamegane.tech www.kezamegane.tech;
+
+    # SSL Certificate paths
+    ssl_certificate /etc/letsencrypt/live/kezamegane.tech/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/kezamegane.tech/privkey.pem;
+
+    # SSL Configuration (equivalent to HAproxy settings)
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # Logging
+    access_log /var/log/nginx/https_access.log;
+    error_log /var/log/nginx/https_error.log;
+
+    # Backend proxy configuration
+    location / {
+        proxy_pass http://web-backend;
+        
+        # Headers (equivalent to HAproxy reqadd)
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        
+        # Timeouts (equivalent to HAproxy timeouts)
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 50s;
+        proxy_read_timeout 50s;
+    }
+}
